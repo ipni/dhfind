@@ -86,7 +86,7 @@ func New(addr, dhaddr string, m *metrics.Metrics, simulation bool) (*Server, err
 	server.dhaddr = dhaddr
 	server.simulation = simulation
 	if simulation {
-		server.simulationJobs = make(chan *http.Request, simulationWorkerCount)
+		server.simulationJobs = make(chan *http.Request)
 	}
 
 	return &server, nil
@@ -139,13 +139,17 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMhSubtree(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
+	simulation := s.simulation
+	if ss := r.URL.Query()["simulation"]; len(ss) > 0 {
+		simulation = ss[0] == "true"
+	}
 	switch r.Method {
 	case http.MethodGet:
-		if s.simulation {
+		if simulation {
 			s.simulationJobs <- r
 			http.Error(w, "", http.StatusNotFound)
 		} else {
+			start := time.Now()
 			ws := newResponseWriterWithStatus(w)
 			defer s.reportLatency(start, ws.status, r.Method, "multihash")
 			s.handleGetMh(newIPNILookupResponseWriter(ws, preferJSON), r)
@@ -230,15 +234,16 @@ func (s *Server) handleError(w http.ResponseWriter, err error) {
 }
 
 func (s *Server) simulationWorker() {
-	select {
-	case <-s.simulationContext.Done():
-		logger.Info("Finished")
-		return
-	case job := <-s.simulationJobs:
-		var ws *responseWriterWithStatus
-		start := time.Now()
-		ws = newResponseWriterWithStatus(nil)
-		s.handleGetMh(newIPNILookupResponseWriter(ws, preferJSON), job)
-		s.reportLatency(start, ws.status, job.Method, "multihash")
+	for {
+		select {
+		case <-s.simulationContext.Done():
+			return
+		case job := <-s.simulationJobs:
+			var ws *responseWriterWithStatus
+			start := time.Now()
+			ws = newResponseWriterWithStatus(nil)
+			s.handleGetMh(newIPNILookupResponseWriter(ws, preferJSON), job)
+			s.reportLatency(start, ws.status, job.Method, "multihash")
+		}
 	}
 }
