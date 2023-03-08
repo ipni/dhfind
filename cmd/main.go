@@ -18,6 +18,7 @@ var (
 func main() {
 	listenAddr := flag.String("listenAddr", "0.0.0.0:40080", "The dhfind HTTP server listen address.")
 	dhstoreAddr := flag.String("dhstoreAddr", "", "The dhstore HTTP address.")
+	stiAddr := flag.String("stiAddr", "", "The storetheindex HTTP address, used for fetching providers.")
 	metricsAddr := flag.String("metricsAddr", "0.0.0.0:40082", "Prometheus metrics HTTP address.")
 	simulation := flag.Bool("simulation", false, "Whether dhfind runs in simulation mode.")
 	llvl := flag.String("logLevel", "info", "The logging level. Only applied if GOLOG_LOG_LEVEL environment variable is unset.")
@@ -28,8 +29,8 @@ func main() {
 		_ = logging.SetLogLevel("*", *llvl)
 	}
 
-	if *listenAddr == "" || *dhstoreAddr == "" || *metricsAddr == "" {
-		panic("listen, dhstore and metrics addresses must be provided")
+	if *listenAddr == "" || *dhstoreAddr == "" || *metricsAddr == "" || *stiAddr == "" {
+		panic("listen, dhstore, sti and metrics addresses must be provided")
 	}
 
 	m, err := metrics.New(*metricsAddr)
@@ -39,7 +40,7 @@ func main() {
 
 	ctx := context.Background()
 
-	server, err := server.New(*listenAddr, *dhstoreAddr, m, *simulation)
+	server, err := server.New(*listenAddr, *dhstoreAddr, *stiAddr, m, *simulation)
 	if err != nil {
 		panic(err)
 	}

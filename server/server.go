@@ -27,6 +27,7 @@ type Server struct {
 	s                 *http.Server
 	m                 *metrics.Metrics
 	dhaddr            string
+	stiaddr           string
 	simulation        bool
 	simulationJobs    chan *http.Request
 	simulationCancel  context.CancelFunc
@@ -75,7 +76,7 @@ func (rec *responseWriterWithStatus) WriteHeader(code int) {
 	}
 }
 
-func New(addr, dhaddr string, m *metrics.Metrics, simulation bool) (*Server, error) {
+func New(addr, dhaddr, stiaddr string, m *metrics.Metrics, simulation bool) (*Server, error) {
 	var server Server
 
 	server.s = &http.Server{
@@ -84,6 +85,7 @@ func New(addr, dhaddr string, m *metrics.Metrics, simulation bool) (*Server, err
 	}
 	server.m = m
 	server.dhaddr = dhaddr
+	server.stiaddr = stiaddr
 	server.simulation = simulation
 	if simulation {
 		server.simulationJobs = make(chan *http.Request)
@@ -173,7 +175,7 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	}
 	ctx := context.Background()
 
-	c, err := finderhttpclient.NewDHashClient(s.dhaddr, s.dhaddr)
+	c, err := finderhttpclient.NewDHashClient(s.dhaddr, s.stiaddr)
 	if err != nil {
 		s.handleError(w, err)
 		return
