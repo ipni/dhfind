@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/ipfs/go-log/v2 v2.5.1
-	github.com/ipni/storetheindex v0.5.10
+	github.com/ipni/storetheindex v0.5.11-0.20230313121117-58cc78b38ab1
 	github.com/multiformats/go-multihash v0.2.1
 	github.com/prometheus/client_golang v1.14.0
 	go.opentelemetry.io/otel v1.12.0

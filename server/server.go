@@ -8,6 +8,7 @@ import (
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
+	v0 "github.com/ipni/storetheindex/api/v0"
 	finderhttpclient "github.com/ipni/storetheindex/api/v0/finder/client/http"
 	"github.com/ischasny/dhfind/metrics"
 )
@@ -226,10 +227,14 @@ func (s *Server) handleCatchAll(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleError(w http.ResponseWriter, err error) {
 	var status int
-	switch err.(type) {
+	switch cerr := err.(type) {
 	case ErrUnsupportedMulticodecCode, ErrMultihashDecode:
 		status = http.StatusBadRequest
+	case *v0.Error:
+		// TODO: do we need to treat metadata not founds differently to multihahs not found?
+		status = cerr.Status()
 	default:
+		logger.Warn("Internal server error: %v", err)
 		status = http.StatusInternalServerError
 	}
 	http.Error(w, err.Error(), status)
