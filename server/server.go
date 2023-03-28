@@ -11,6 +11,7 @@ import (
 	v0 "github.com/ipni/storetheindex/api/v0"
 	finderhttpclient "github.com/ipni/storetheindex/api/v0/finder/client/http"
 	"github.com/ischasny/dhfind/metrics"
+	"go.uber.org/zap"
 )
 
 // preferJSON specifies weather to prefer JSON over NDJSON response when request accepts */*, i.e.
@@ -196,18 +197,20 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	mh := w.Key()
+	log := logger.With("multihash", mh)
 	ctx := context.Background()
 
 	c, err := finderhttpclient.NewDHashClient(s.dhaddr, s.stiaddr)
 	if err != nil {
-		s.handleError(w, err)
+		s.handleError(w, err, log)
 		return
 	}
 
-	findResponse, err := c.Find(ctx, w.Key())
+	findResponse, err := c.Find(ctx, mh)
 
 	if err != nil {
-		s.handleError(w, err)
+		s.handleError(w, err, log)
 		return
 	}
 
@@ -217,7 +220,7 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 
 	for _, pr := range mhr.ProviderResults {
 		if err := w.WriteProviderResult(pr); err != nil {
-			logger.Errorw("Failed to encode provider result", "err", err)
+			log.Errorw("Failed to encode provider result", "err", err)
 			http.Error(w, "", http.StatusInternalServerError)
 			return
 		}
@@ -227,7 +230,7 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 		case errHttpResponse:
 			e.WriteTo(w)
 		default:
-			logger.Errorw("Failed to finalize lookup results", "err", err)
+			log.Errorw("Failed to finalize lookup results", "err", err)
 			http.Error(w, "", http.StatusInternalServerError)
 		}
 	}
@@ -247,7 +250,9 @@ func (s *Server) handleCatchAll(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "", http.StatusNotFound)
 }
 
-func (s *Server) handleError(w http.ResponseWriter, err error) {
+// handleError writes an error to the response and logs it.
+// A custom logger is passed in to propagate the request context with such parameters as multihash.
+func (s *Server) handleError(w http.ResponseWriter, err error, log *zap.SugaredLogger) {
 	var status int
 	switch cerr := err.(type) {
 	case ErrUnsupportedMulticodecCode, ErrMultihashDecode:
@@ -256,7 +261,7 @@ func (s *Server) handleError(w http.ResponseWriter, err error) {
 		// TODO: do we need to treat metadata not founds differently to multihahs not found?
 		status = cerr.Status()
 	default:
-		logger.Warn("Internal server error: %v", err)
+		log.Warnw("Internal server error", "err", err)
 		status = http.StatusInternalServerError
 	}
 	http.Error(w, err.Error(), status)
