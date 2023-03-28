@@ -3,6 +3,7 @@ module github.com/ischasny/dhfind
 go 1.19
 
 require (
+	github.com/ipfs/go-cid v0.3.2
 	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/ipni/storetheindex v0.5.11-0.20230313121117-58cc78b38ab1
 	github.com/multiformats/go-multihash v0.2.1
@@ -29,7 +30,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/ipfs/go-cid v0.3.2 // indirect
 	github.com/ipni/dhstore v0.0.2-0.20230120184057-c54e9d7c72f7 // indirect
 	github.com/ipni/go-indexer-core v0.7.2-0.20230221145318-9aef8658e4ea // indirect
 	github.com/klauspost/compress v1.15.12 // indirect
