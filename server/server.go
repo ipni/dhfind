@@ -18,9 +18,6 @@ import (
 // any response format, has no `Accept` header at all.
 const preferJSON = true
 
-// simulationWorkerCount is a number of background workers that find tasks are delegated to in simulation mode
-const simulationWorkerCount = 50
-
 var (
 	logger = logging.Logger("server")
 )
@@ -39,6 +36,8 @@ type Server struct {
 	simulationCancel context.CancelFunc
 	// simulationContext is a context that is used to cancel all background workers in simulation mode
 	simulationContext context.Context
+	// simulationWorkerCount is a number of background workers that find tasks are delegated to in simulation mode
+	simulationWorkerCount int
 }
 
 // simulationJob is a job that is sent to a background worker in simulation mode. It's effectively a wrapper
@@ -90,7 +89,7 @@ func (rec *responseWriterWithStatus) WriteHeader(code int) {
 	}
 }
 
-func New(addr, dhaddr, stiaddr string, m *metrics.Metrics, simulation bool) (*Server, error) {
+func New(addr, dhaddr, stiaddr string, m *metrics.Metrics, simulation bool, simulationWorkerCount, simulationChannelSize int) (*Server, error) {
 	var server Server
 
 	server.s = &http.Server{
@@ -102,7 +101,8 @@ func New(addr, dhaddr, stiaddr string, m *metrics.Metrics, simulation bool) (*Se
 	server.stiaddr = stiaddr
 	server.simulation = simulation
 	if simulation {
-		server.simulationJobs = make(chan simulationJob)
+		server.simulationJobs = make(chan simulationJob, simulationChannelSize)
+		server.simulationWorkerCount = simulationWorkerCount
 	}
 
 	return &server, nil
@@ -126,7 +126,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	if s.simulation {
 		s.simulationContext, s.simulationCancel = context.WithCancel(ctx)
-		for i := 1; i <= simulationWorkerCount; i++ {
+		for i := 1; i <= s.simulationWorkerCount; i++ {
 			go s.simulationWorker()
 		}
 	}
