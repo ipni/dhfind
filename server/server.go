@@ -172,7 +172,12 @@ func (s *Server) handleFindSubtree(w http.ResponseWriter, r *http.Request, isMul
 	switch r.Method {
 	case http.MethodGet:
 		if simulation {
-			s.simulationJobs <- simulationJob{request: r, isMultihash: isMultihash}
+			select {
+			case s.simulationJobs <- simulationJob{request: r, isMultihash: isMultihash}:
+			default:
+				logger.Info("Simulation channel full. Discarding value")
+			}
+
 			http.Error(w, "", http.StatusNotFound)
 		} else {
 			start := time.Now()
