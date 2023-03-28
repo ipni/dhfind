@@ -25,14 +25,26 @@ var (
 )
 
 type Server struct {
-	s                 *http.Server
-	m                 *metrics.Metrics
-	dhaddr            string
-	stiaddr           string
-	simulation        bool
-	simulationJobs    chan *http.Request
-	simulationCancel  context.CancelFunc
+	s       *http.Server
+	m       *metrics.Metrics
+	dhaddr  string
+	stiaddr string
+	// simulation defines if the server is running in simulation mode. In simulation mode, the server
+	// processs requests in a background worker pool and returns a 404 response immediately. The simulation mode is
+	// used to tets performance of the server under load.
+	simulation     bool
+	simulationJobs chan simulationJob
+	// simulationCancel is a cancel function that is used to cancel all background workers in simulation mode
+	simulationCancel context.CancelFunc
+	// simulationContext is a context that is used to cancel all background workers in simulation mode
 	simulationContext context.Context
+}
+
+// simulationJob is a job that is sent to a background worker in simulation mode. It's effectively a wrapper
+// around http request and a flag that indicates if the request is for a multihash or a CID.
+type simulationJob struct {
+	request     *http.Request
+	isMultihash bool
 }
 
 // responseWriterWithStatus is required to capture status code from ResponseWriter so that it can be reported
@@ -89,7 +101,7 @@ func New(addr, dhaddr, stiaddr string, m *metrics.Metrics, simulation bool) (*Se
 	server.stiaddr = stiaddr
 	server.simulation = simulation
 	if simulation {
-		server.simulationJobs = make(chan *http.Request)
+		server.simulationJobs = make(chan simulationJob)
 	}
 
 	return &server, nil
@@ -98,6 +110,7 @@ func New(addr, dhaddr, stiaddr string, m *metrics.Metrics, simulation bool) (*Se
 func (s *Server) serveMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/multihash/", s.handleMhSubtree)
+	mux.HandleFunc("/cid/", s.handleCidSubtree)
 	mux.HandleFunc("/ready", s.handleReady)
 	mux.HandleFunc("/", s.handleCatchAll)
 	return mux
@@ -141,7 +154,16 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleCidSubtree(w http.ResponseWriter, r *http.Request) {
+	s.handleFindSubtree(w, r, false)
+}
+
 func (s *Server) handleMhSubtree(w http.ResponseWriter, r *http.Request) {
+	s.handleFindSubtree(w, r, true)
+}
+
+// handleFindSubtree is a handler for /multihash and /cid subtrees. isMultihash is true when /multihash subtree is requested.
+func (s *Server) handleFindSubtree(w http.ResponseWriter, r *http.Request, isMultihash bool) {
 	simulation := s.simulation
 	if ss := r.URL.Query()["simulation"]; len(ss) > 0 {
 		simulation = ss[0] == "true"
@@ -149,13 +171,13 @@ func (s *Server) handleMhSubtree(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if simulation {
-			s.simulationJobs <- r
+			s.simulationJobs <- simulationJob{request: r, isMultihash: isMultihash}
 			http.Error(w, "", http.StatusNotFound)
 		} else {
 			start := time.Now()
 			ws := newResponseWriterWithStatus(w)
 			defer s.reportLatency(start, ws.status, r.Method, "multihash")
-			s.handleGetMh(newIPNILookupResponseWriter(ws, preferJSON), r)
+			s.handleGetMh(newIPNILookupResponseWriter(ws, preferJSON, isMultihash), r)
 		}
 	default:
 		discardBody(r)
@@ -249,8 +271,8 @@ func (s *Server) simulationWorker() {
 			var ws *responseWriterWithStatus
 			start := time.Now()
 			ws = newResponseWriterWithStatus(nil)
-			s.handleGetMh(newIPNILookupResponseWriter(ws, preferJSON), job)
-			s.reportLatency(start, ws.status, job.Method, "multihash")
+			s.handleGetMh(newIPNILookupResponseWriter(ws, preferJSON, job.isMultihash), job.request)
+			s.reportLatency(start, ws.status, job.request.Method, "multihash")
 		}
 	}
 }

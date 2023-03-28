@@ -5,6 +5,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/ipfs/go-cid"
 	"github.com/ipni/storetheindex/api/v0/finder/model"
 	"github.com/multiformats/go-multihash"
 )
@@ -19,11 +20,14 @@ type ipniLookupResponseWriter struct {
 	jsonResponseWriter
 	result model.MultihashResult
 	count  int
+	// isMultihash is true if the request is for a multihash, false if it is for a CID
+	isMultihash bool
 }
 
-func newIPNILookupResponseWriter(w http.ResponseWriter, preferJson bool) lookupResponseWriter {
+func newIPNILookupResponseWriter(w http.ResponseWriter, preferJson bool, isMultihash bool) lookupResponseWriter {
 	return &ipniLookupResponseWriter{
 		jsonResponseWriter: newJsonResponseWriter(w, preferJson),
+		isMultihash:        isMultihash,
 	}
 }
 
@@ -31,12 +35,23 @@ func (i *ipniLookupResponseWriter) Accept(r *http.Request) error {
 	if err := i.jsonResponseWriter.Accept(r); err != nil {
 		return err
 	}
-	smh := strings.TrimPrefix(path.Base(r.URL.Path), "multihash/")
+	var mh multihash.Multihash
 	var err error
-	i.result.Multihash, err = multihash.FromB58String(smh)
+	if i.isMultihash {
+		smh := strings.TrimPrefix(path.Base(r.URL.Path), "multihash/")
+		mh, err = multihash.FromB58String(smh)
+	} else {
+		scid := strings.TrimPrefix(path.Base(r.URL.Path), "cid/")
+		var c cid.Cid
+		c, err = cid.Decode(scid)
+		if err == nil {
+			mh = multihash.Multihash(c.Hash())
+		}
+	}
 	if err != nil {
 		return errHttpResponse{message: err.Error(), status: http.StatusBadRequest}
 	}
+	i.result.Multihash = mh
 	return nil
 }
 
