@@ -8,8 +8,8 @@ import (
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
-	v0 "github.com/ipni/storetheindex/api/v0"
-	finderhttpclient "github.com/ipni/storetheindex/api/v0/finder/client/http"
+	"github.com/ipni/go-libipni/apierror"
+	finderhttpclient "github.com/ipni/go-libipni/find/client/http"
 	"github.com/ischasny/dhfind/metrics"
 	"go.uber.org/zap"
 )
@@ -262,7 +262,7 @@ func (s *Server) handleError(w http.ResponseWriter, err error, log *zap.SugaredL
 	switch cerr := err.(type) {
 	case ErrUnsupportedMulticodecCode, ErrMultihashDecode:
 		status = http.StatusBadRequest
-	case *v0.Error:
+	case *apierror.Error:
 		// TODO: do we need to treat metadata not founds differently to multihahs not found?
 		status = cerr.Status()
 	default:
