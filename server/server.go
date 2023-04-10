@@ -219,8 +219,12 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 		return
 	}
 
-	// There going to be exactly one item in the array as we seached for one multihash only
-	// and if it wasn't found then an error would have been returned
+	if len(findResponse.MultihashResults) == 0 {
+		log.Errorw("No multihash results")
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+
 	mhr := findResponse.MultihashResults[0]
 
 	for _, pr := range mhr.ProviderResults {
