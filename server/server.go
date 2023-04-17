@@ -10,6 +10,7 @@ import (
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/ipni/go-libipni/apierror"
 	finderhttpclient "github.com/ipni/go-libipni/find/client/http"
+	"github.com/ipni/go-libipni/find/model"
 	"github.com/ischasny/dhfind/metrics"
 	"go.uber.org/zap"
 )
@@ -212,35 +213,41 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 		return
 	}
 
-	findResponse, err := c.Find(ctx, mh)
+	resChan := make(chan model.ProviderResult)
+	errChan := make(chan error)
 
-	if err != nil {
-		s.handleError(w, err, log)
-		return
-	}
+	go c.FindAsync(ctx, mh, resChan, errChan)
 
-	if len(findResponse.MultihashResults) == 0 {
-		log.Errorw("No multihash results")
-		http.Error(w, "", http.StatusNotFound)
-		return
-	}
-
-	mhr := findResponse.MultihashResults[0]
-
-	for _, pr := range mhr.ProviderResults {
-		if err := w.WriteProviderResult(pr); err != nil {
-			log.Errorw("Failed to encode provider result", "err", err)
-			http.Error(w, "", http.StatusInternalServerError)
+	haveResults := false
+	for {
+		select {
+		case err := <-errChan:
+			s.handleError(w, err, log)
 			return
-		}
-	}
-	if err := w.Close(); err != nil {
-		switch e := err.(type) {
-		case errHttpResponse:
-			e.WriteTo(w)
-		default:
-			log.Errorw("Failed to finalize lookup results", "err", err)
-			http.Error(w, "", http.StatusInternalServerError)
+		case res, ok := <-resChan:
+			if !ok {
+				// If there were no results - return 404, otherwise finalize the response and return 200.
+				if !haveResults {
+					http.Error(w, "", http.StatusNotFound)
+					return
+				}
+				if err := w.Close(); err != nil {
+					switch e := err.(type) {
+					case errHttpResponse:
+						e.WriteTo(w)
+					default:
+						log.Errorw("Failed to finalize lookup results", "err", err)
+						http.Error(w, "", http.StatusInternalServerError)
+					}
+				}
+				return
+			}
+			haveResults = true
+			if err := w.WriteProviderResult(res); err != nil {
+				log.Errorw("Failed to encode provider result", "err", err)
+				http.Error(w, "", http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 }
