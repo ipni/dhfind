@@ -251,7 +251,7 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 				}
 				return
 			}
-			// if this is the first result that we get - report latency as a time to first byte
+			// if this is the first result that we get - report latency as a time to first result
 			if !haveResults {
 				s.reportLatency(start, 200, r.Method, methodMultihash, true)
 			}
