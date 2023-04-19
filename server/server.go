@@ -265,8 +265,8 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) reportLatency(start time.Time, status int, method, path string, ttfb bool) {
-	s.m.RecordHttpLatency(context.Background(), time.Since(start), method, path, status, ttfb)
+func (s *Server) reportLatency(start time.Time, status int, method, path string, ttfr bool) {
+	s.m.RecordHttpLatency(context.Background(), time.Since(start), method, path, status, ttfr)
 }
 
 func discardBody(r *http.Request) {
