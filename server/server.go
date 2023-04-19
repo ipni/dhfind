@@ -15,9 +15,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// preferJSON specifies weather to prefer JSON over NDJSON response when request accepts */*, i.e.
-// any response format, has no `Accept` header at all.
-const preferJSON = true
+const (
+	// preferJSON specifies weather to prefer JSON over NDJSON response when request accepts */*, i.e.
+	// any response format, has no `Accept` header at all.
+	preferJSON = true
+
+	// methodMultihash represents a multihash method for latency reporting purposes
+	methodMultihash = "multihash"
+
+	// methodReady represents a ready method for latency reporting purposes
+	methodReady = "ready"
+)
 
 var (
 	logger = logging.Logger("server")
@@ -146,7 +154,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	ws := newResponseWriterWithStatus(w)
-	defer s.reportLatency(start, ws.status, r.Method, "ready")
+	defer s.reportLatency(start, ws.status, r.Method, methodReady, false)
 	discardBody(r)
 	switch r.Method {
 	case http.MethodGet:
@@ -183,7 +191,7 @@ func (s *Server) handleFindSubtree(w http.ResponseWriter, r *http.Request, isMul
 		} else {
 			start := time.Now()
 			ws := newResponseWriterWithStatus(w)
-			defer s.reportLatency(start, ws.status, r.Method, "multihash")
+			defer s.reportLatency(start, ws.status, r.Method, methodMultihash, false)
 			s.handleGetMh(newIPNILookupResponseWriter(ws, preferJSON, isMultihash), r)
 		}
 	default:
@@ -193,6 +201,7 @@ func (s *Server) handleFindSubtree(w http.ResponseWriter, r *http.Request, isMul
 }
 
 func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
+	start := time.Now()
 	if err := w.Accept(r); err != nil {
 		switch e := err.(type) {
 		case errHttpResponse:
@@ -242,6 +251,10 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 				}
 				return
 			}
+			// if this is the first result that we get - report latency as a time to first byte
+			if !haveResults {
+				s.reportLatency(start, 200, r.Method, methodMultihash, true)
+			}
 			haveResults = true
 			if err := w.WriteProviderResult(res); err != nil {
 				log.Errorw("Failed to encode provider result", "err", err)
@@ -252,8 +265,8 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) reportLatency(start time.Time, status int, method, path string) {
-	s.m.RecordHttpLatency(context.Background(), time.Since(start), method, path, status)
+func (s *Server) reportLatency(start time.Time, status int, method, path string, ttfb bool) {
+	s.m.RecordHttpLatency(context.Background(), time.Since(start), method, path, status, ttfb)
 }
 
 func discardBody(r *http.Request) {
@@ -293,7 +306,7 @@ func (s *Server) simulationWorker() {
 			start := time.Now()
 			ws = newResponseWriterWithStatus(nil)
 			s.handleGetMh(newIPNILookupResponseWriter(ws, preferJSON, job.isMultihash), job.request)
-			s.reportLatency(start, ws.status, job.request.Method, "multihash")
+			s.reportLatency(start, ws.status, job.request.Method, methodMultihash, false)
 		}
 	}
 }
