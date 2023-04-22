@@ -50,9 +50,9 @@ func New(metricsAddr string) (*Metrics, error) {
 	return &m, nil
 }
 
-func (m *Metrics) RecordHttpLatency(ctx context.Context, t time.Duration, method, path string, status int) {
+func (m *Metrics) RecordHttpLatency(ctx context.Context, t time.Duration, method, path string, status int, ttfr bool) {
 	m.httpLatency.Record(ctx, t.Milliseconds(),
-		attribute.String("method", method), attribute.String("path", path), attribute.Int("status", status))
+		attribute.String("method", method), attribute.String("path", path), attribute.Int("status", status), attribute.Bool("ttfr", ttfr))
 }
 
 func (m *Metrics) Start(_ context.Context) error {
