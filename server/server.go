@@ -230,9 +230,11 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	haveResults := false
 	for {
 		select {
-		case err := <-errChan:
-			s.handleError(w, err, log)
-			return
+		case err, ok := <-errChan:
+			if ok {
+				s.handleError(w, err, log)
+				return
+			}
 		case res, ok := <-resChan:
 			if !ok {
 				// If there were no results - return 404, otherwise finalize the response and return 200.
