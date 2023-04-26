@@ -191,8 +191,8 @@ func (s *Server) handleFindSubtree(w http.ResponseWriter, r *http.Request, isMul
 		} else {
 			start := time.Now()
 			ws := newResponseWriterWithStatus(w)
-			defer s.reportLatency(start, ws.status, r.Method, methodMultihash, false)
 			s.handleGetMh(newIPNILookupResponseWriter(ws, preferJSON, isMultihash), r)
+			s.reportLatency(start, ws.status, r.Method, methodMultihash, false)
 		}
 	default:
 		discardBody(r)
