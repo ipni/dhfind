@@ -32,10 +32,9 @@ var (
 )
 
 type Server struct {
-	s       *http.Server
-	m       *metrics.Metrics
-	dhaddr  string
-	stiaddr string
+	c *finderhttpclient.DHashClient
+	s *http.Server
+	m *metrics.Metrics
 	// simulation defines if the server is running in simulation mode. In simulation mode, the server
 	// processs requests in a background worker pool and returns a 404 response immediately. The simulation mode is
 	// used to tets performance of the server under load.
@@ -106,9 +105,15 @@ func New(addr, dhaddr, stiaddr string, m *metrics.Metrics, simulation bool, simu
 		Handler: server.serveMux(),
 	}
 	server.m = m
-	server.dhaddr = dhaddr
-	server.stiaddr = stiaddr
 	server.simulation = simulation
+
+	c, err := finderhttpclient.NewDHashClient(dhaddr, stiaddr)
+	if err != nil {
+		return nil, err
+	}
+
+	server.c = c
+
 	if simulation {
 		server.simulationJobs = make(chan simulationJob, simulationChannelSize)
 		server.simulationWorkerCount = simulationWorkerCount
@@ -216,16 +221,10 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	log := logger.With("multihash", mh)
 	ctx := context.Background()
 
-	c, err := finderhttpclient.NewDHashClient(s.dhaddr, s.stiaddr)
-	if err != nil {
-		s.handleError(w, err, log)
-		return
-	}
-
 	resChan := make(chan model.ProviderResult)
 	errChan := make(chan error)
 
-	go c.FindAsync(ctx, mh, resChan, errChan)
+	go s.c.FindAsync(ctx, mh, resChan, errChan)
 
 	haveResults := false
 	for {
