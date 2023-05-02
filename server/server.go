@@ -32,11 +32,9 @@ var (
 )
 
 type Server struct {
-	c       *finderhttpclient.DHashClient
-	s       *http.Server
-	m       *metrics.Metrics
-	dhaddr  string
-	stiaddr string
+	c *finderhttpclient.DHashClient
+	s *http.Server
+	m *metrics.Metrics
 	// simulation defines if the server is running in simulation mode. In simulation mode, the server
 	// processs requests in a background worker pool and returns a 404 response immediately. The simulation mode is
 	// used to tets performance of the server under load.
@@ -107,8 +105,6 @@ func New(addr, dhaddr, stiaddr string, m *metrics.Metrics, simulation bool, simu
 		Handler: server.serveMux(),
 	}
 	server.m = m
-	server.dhaddr = dhaddr
-	server.stiaddr = stiaddr
 	server.simulation = simulation
 
 	c, err := finderhttpclient.NewDHashClient(dhaddr, stiaddr)
