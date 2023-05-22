@@ -107,7 +107,8 @@ func New(addr, dhaddr, stiaddr string, m *metrics.Metrics, simulation bool, simu
 	server.m = m
 	server.simulation = simulation
 
-	c, err := finderhttpclient.NewDHashClient(dhaddr, stiaddr)
+	c, err := finderhttpclient.NewDHashClient(dhaddr, stiaddr,
+		finderhttpclient.WithClient(newShardingClient()))
 	if err != nil {
 		return nil, err
 	}
