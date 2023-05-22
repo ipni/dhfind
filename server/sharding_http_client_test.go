@@ -11,7 +11,7 @@ import (
 )
 
 func TestShardingClient(t *testing.T) {
-	var seenMultihash, seenMetadata bool
+	var seenMultihash, seenInvalidMultihash, seenMetadata bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u := r.URL.Path
 		if r.Method != http.MethodGet {
@@ -21,6 +21,9 @@ func TestShardingClient(t *testing.T) {
 		if strings.Contains(u, "multihash/2wvrrzCXz5kN4bEKCNvZgPECjiNwdXLeHuqU5yZzeRN7j8o") {
 			require.Equal(t, "2wvrrzCXz5kN4bEKCNvZgPECjiNwdXLeHuqU5yZzeRN7j8o", r.Header.Get(shardKeyHeader))
 			seenMultihash = true
+		} else if strings.Contains(u, "multihash/INVALID") {
+			require.Equal(t, "INVALID", r.Header.Get(shardKeyHeader))
+			seenInvalidMultihash = true
 		} else if strings.Contains(u, "metadata") {
 			require.Equal(t, "ABCD", r.Header.Get(shardKeyHeader))
 			seenMetadata = true
@@ -29,16 +32,14 @@ func TestShardingClient(t *testing.T) {
 		}
 	}))
 
-	c := NewShardingClient()
+	c := newShardingClient()
 
 	sendRequest(t, c, server.URL+"/multihash/2wvrrzCXz5kN4bEKCNvZgPECjiNwdXLeHuqU5yZzeRN7j8o", http.MethodGet) // double hashed multihash
-	sendRequest(t, c, server.URL+"/multihash/QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn", http.MethodGet)  // regular multihash - should be no headers
-	sendRequest(t, c, server.URL+"/multihash/INVALID", http.MethodGet)                                         // invalid multihash - should be no headers
+	sendRequest(t, c, server.URL+"/multihash/INVALID", http.MethodGet)                                         // invalid multihash - should still succeed
 	sendRequest(t, c, server.URL+"/metadata/ABCD", http.MethodGet)
 	sendRequest(t, c, server.URL+"/someOtherPath/ABCD", http.MethodGet)
 	sendRequest(t, c, server.URL+"/someOtherPath/ABCD", http.MethodPost)
-	require.True(t, seenMetadata)
-	require.True(t, seenMultihash)
+	require.True(t, seenMetadata && seenMultihash && seenInvalidMultihash)
 }
 
 func sendRequest(t *testing.T, c *http.Client, u, method string) {
