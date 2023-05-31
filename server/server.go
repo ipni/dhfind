@@ -224,7 +224,8 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 
 	// create result and error channels
 	resChan := make(chan model.ProviderResult)
-	errChan := make(chan error)
+	// the size of two is required so that the client doesn't in its go routine when trying to submit an error and return
+	errChan := make(chan error, 2)
 
 	// launch the find in a separate go routine
 	go s.c.FindAsync(ctx, mh, resChan, errChan)
