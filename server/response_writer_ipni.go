@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"path"
 	"strings"
@@ -62,12 +63,10 @@ func (i *ipniLookupResponseWriter) Key() multihash.Multihash {
 func (i *ipniLookupResponseWriter) WriteProviderResult(pr model.ProviderResult) error {
 	if i.nd {
 		if err := i.encoder.Encode(pr); err != nil {
-			logger.Errorw("Failed to encode ndjson response", "err", err)
-			return err
+			return fmt.Errorf("failed to write encoded ndjson response: %w", err)
 		}
 		if _, err := i.w.Write(newline); err != nil {
-			logger.Errorw("Failed to encode ndjson response", "err", err)
-			return err
+			return fmt.Errorf("failed to write encoded ndjson response: %w", err)
 		}
 		if i.f != nil {
 			i.f.Flush()

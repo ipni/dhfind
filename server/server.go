@@ -9,7 +9,7 @@ import (
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/ipni/go-libipni/apierror"
-	finderhttpclient "github.com/ipni/go-libipni/find/client/http"
+	finderhttpclient "github.com/ipni/go-libipni/find/client"
 	"github.com/ipni/go-libipni/find/model"
 	"github.com/ischasny/dhfind/metrics"
 	"go.uber.org/zap"
@@ -208,7 +208,8 @@ func (s *Server) handleFindSubtree(w http.ResponseWriter, r *http.Request, isMul
 
 func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	start := time.Now()
-	if err := w.Accept(r); err != nil {
+	err := w.Accept(r)
+	if err != nil {
 		switch e := err.(type) {
 		case errHttpResponse:
 			e.WriteTo(w)
@@ -220,32 +221,37 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	}
 	mh := w.Key()
 	log := logger.With("multihash", mh)
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(r.Context())
 
 	// create result and error channels
 	resChan := make(chan model.ProviderResult)
-	// the size of two is required so that the client doesn't in its go routine when trying to submit an error and return
-	errChan := make(chan error, 2)
 
 	// launch the find in a separate go routine
-	go s.c.FindAsync(ctx, mh, resChan, errChan)
+	errChan := make(chan error, 1)
+	go func() {
+		// FindAsync returns results on resChan until there are no more results or error.
+		// When finished, returns the error or nil.
+		errChan <- s.c.FindAsync(ctx, mh, resChan)
+	}()
 
 	haveResults := false
-
 	for pr := range resChan {
 		// if this is the first result that we got - report latency as a time to first result
 		if !haveResults {
 			s.reportLatency(start, 200, r.Method, methodMultihash, true)
+			haveResults = true
 		}
-		haveResults = true
-		if err := w.WriteProviderResult(pr); err != nil {
+		if err = w.WriteProviderResult(pr); err != nil {
 			log.Errorw("Failed to encode provider result", "err", err)
-			http.Error(w, "", http.StatusInternalServerError)
-			return
+			// This error is due to the client disconnecting. Cancel the
+			// FindAsync context and continue reading from resChan until it is
+			// done. The canceled context prevents this error from repeating.
+			cancel()
+			continue
 		}
 	}
-	// if there was an error in the error channel - return to the user
-	err := <-errChan
+	// FindAsync finished, check for error.
+	err = <-errChan
 	if err != nil {
 		s.handleError(w, err, log)
 		return
@@ -255,7 +261,7 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
-	if err := w.Close(); err != nil {
+	if err = w.Close(); err != nil {
 		switch e := err.(type) {
 		case errHttpResponse:
 			e.WriteTo(w)
