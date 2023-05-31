@@ -222,47 +222,45 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	log := logger.With("multihash", mh)
 	ctx := context.Background()
 
+	// create result and error channels
 	resChan := make(chan model.ProviderResult)
 	errChan := make(chan error)
 
+	// launch the find in a separate go routine
 	go s.c.FindAsync(ctx, mh, resChan, errChan)
 
 	haveResults := false
-	for {
-		select {
-		case err, ok := <-errChan:
-			if ok {
-				s.handleError(w, err, log)
-				return
-			}
-		case res, ok := <-resChan:
-			if !ok {
-				// If there were no results - return 404, otherwise finalize the response and return 200.
-				if !haveResults {
-					http.Error(w, "", http.StatusNotFound)
-					return
-				}
-				if err := w.Close(); err != nil {
-					switch e := err.(type) {
-					case errHttpResponse:
-						e.WriteTo(w)
-					default:
-						log.Errorw("Failed to finalize lookup results", "err", err)
-						http.Error(w, "", http.StatusInternalServerError)
-					}
-				}
-				return
-			}
-			// if this is the first result that we get - report latency as a time to first result
-			if !haveResults {
-				s.reportLatency(start, 200, r.Method, methodMultihash, true)
-			}
-			haveResults = true
-			if err := w.WriteProviderResult(res); err != nil {
-				log.Errorw("Failed to encode provider result", "err", err)
-				http.Error(w, "", http.StatusInternalServerError)
-				return
-			}
+
+	for pr := range resChan {
+		// if this is the first result that we got - report latency as a time to first result
+		if !haveResults {
+			s.reportLatency(start, 200, r.Method, methodMultihash, true)
+		}
+		haveResults = true
+		if err := w.WriteProviderResult(pr); err != nil {
+			log.Errorw("Failed to encode provider result", "err", err)
+			http.Error(w, "", http.StatusInternalServerError)
+			return
+		}
+	}
+	// if there was an error in the error channel - return to the user
+	err := <-errChan
+	if err != nil {
+		s.handleError(w, err, log)
+		return
+	}
+	// If there were no results - return 404, otherwise finalize the response and return 200
+	if !haveResults {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	if err := w.Close(); err != nil {
+		switch e := err.(type) {
+		case errHttpResponse:
+			e.WriteTo(w)
+		default:
+			log.Errorw("Failed to finalize lookup results", "err", err)
+			http.Error(w, "", http.StatusInternalServerError)
 		}
 	}
 }
