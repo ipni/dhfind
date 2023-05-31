@@ -222,6 +222,7 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	mh := w.Key()
 	log := logger.With("multihash", mh)
 	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
 
 	// create result and error channels
 	resChan := make(chan model.ProviderResult)
