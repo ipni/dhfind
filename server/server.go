@@ -221,6 +221,11 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	}
 	mh := w.Key()
 	log := logger.With("multihash", mh)
+
+	// It may be sufficient to only use that request context, which gets
+	// canceled when the client connection is closed. This is done to ensure
+	// the FindAsunc exets as soon as possible in case the client context is
+	// not closed right away.
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
