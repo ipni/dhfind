@@ -5,8 +5,8 @@ go 1.19
 require (
 	github.com/ipfs/go-cid v0.4.1
 	github.com/ipfs/go-log/v2 v2.5.1
-	github.com/ipni/go-libipni v0.0.8-0.20230502090232-d63b75b7c9d6
-	github.com/multiformats/go-multihash v0.2.1
+	github.com/ipni/go-libipni v0.2.0
+	github.com/multiformats/go-multihash v0.2.2
 	github.com/prometheus/client_golang v1.14.0
 	github.com/stretchr/testify v1.8.2
 	go.opentelemetry.io/otel v1.13.0
@@ -27,7 +27,7 @@ require (
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
-	github.com/libp2p/go-libp2p v0.27.1 // indirect
+	github.com/libp2p/go-libp2p v0.27.4 // indirect
 	github.com/mattn/go-isatty v0.0.18 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect

@@ -9,7 +9,7 @@ import (
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/ipni/go-libipni/apierror"
-	finderhttpclient "github.com/ipni/go-libipni/find/client/http"
+	finderhttpclient "github.com/ipni/go-libipni/find/client"
 	"github.com/ipni/go-libipni/find/model"
 	"github.com/ischasny/dhfind/metrics"
 	"go.uber.org/zap"
@@ -208,7 +208,8 @@ func (s *Server) handleFindSubtree(w http.ResponseWriter, r *http.Request, isMul
 
 func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	start := time.Now()
-	if err := w.Accept(r); err != nil {
+	err := w.Accept(r)
+	if err != nil {
 		switch e := err.(type) {
 		case errHttpResponse:
 			e.WriteTo(w)
@@ -220,49 +221,59 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	}
 	mh := w.Key()
 	log := logger.With("multihash", mh)
-	ctx := context.Background()
 
+	// It may be sufficient to only use that request context, which gets
+	// canceled when the client connection is closed. This is done to ensure
+	// the FindAsunc exets as soon as possible in case the client context is
+	// not closed right away.
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	// create result and error channels
 	resChan := make(chan model.ProviderResult)
-	errChan := make(chan error)
 
-	go s.c.FindAsync(ctx, mh, resChan, errChan)
+	// launch the find in a separate go routine
+	errChan := make(chan error, 1)
+	go func() {
+		// FindAsync returns results on resChan until there are no more results or error.
+		// When finished, returns the error or nil.
+		errChan <- s.c.FindAsync(ctx, mh, resChan)
+	}()
 
 	haveResults := false
-	for {
-		select {
-		case err, ok := <-errChan:
-			if ok {
-				s.handleError(w, err, log)
-				return
-			}
-		case res, ok := <-resChan:
-			if !ok {
-				// If there were no results - return 404, otherwise finalize the response and return 200.
-				if !haveResults {
-					http.Error(w, "", http.StatusNotFound)
-					return
-				}
-				if err := w.Close(); err != nil {
-					switch e := err.(type) {
-					case errHttpResponse:
-						e.WriteTo(w)
-					default:
-						log.Errorw("Failed to finalize lookup results", "err", err)
-						http.Error(w, "", http.StatusInternalServerError)
-					}
-				}
-				return
-			}
-			// if this is the first result that we get - report latency as a time to first result
-			if !haveResults {
-				s.reportLatency(start, 200, r.Method, methodMultihash, true)
-			}
+	for pr := range resChan {
+		// if this is the first result that we got - report latency as a time to first result
+		if !haveResults {
+			s.reportLatency(start, 200, r.Method, methodMultihash, true)
 			haveResults = true
-			if err := w.WriteProviderResult(res); err != nil {
-				log.Errorw("Failed to encode provider result", "err", err)
-				http.Error(w, "", http.StatusInternalServerError)
-				return
-			}
+		}
+		if err = w.WriteProviderResult(pr); err != nil {
+			log.Errorw("Failed to encode provider result", "err", err)
+			// This error is due to the client disconnecting. Cancel the
+			// FindAsync context and continue reading from resChan until it is
+			// done. The canceled context prevents this error from repeating.
+			cancel()
+			continue
+		}
+	}
+	// FindAsync finished, check for error.
+	err = <-errChan
+	if err != nil {
+		s.handleError(w, err, log)
+		return
+	}
+	// If there were no results - return 404, otherwise finalize the response and return 200
+	if !haveResults {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	if err = w.Close(); err != nil {
+		switch e := err.(type) {
+		case errHttpResponse:
+			e.WriteTo(w)
+		default:
+			log.Errorw("Failed to finalize lookup results", "err", err)
+			http.Error(w, "", http.StatusInternalServerError)
 		}
 	}
 }
