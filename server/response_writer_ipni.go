@@ -86,5 +86,7 @@ func (i *ipniLookupResponseWriter) Close() error {
 	if i.nd {
 		return nil
 	}
-	return i.encoder.Encode(i.result)
+	return i.encoder.Encode(model.FindResponse{
+		MultihashResults: []model.MultihashResult{i.result},
+	})
 }
