@@ -230,8 +230,8 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 		return
 	}
 
-	// handle only double hashed multihashes
-	if dmh.Code != multihash.DBL_SHA2_256 {
+	// Don't handle duble hashed queries as they will be picked up by dhstore backends.
+	if dmh.Code == multihash.DBL_SHA2_256 {
 		http.Error(w, "", http.StatusNotFound)
 		return
 	}
