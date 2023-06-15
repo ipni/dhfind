@@ -12,7 +12,6 @@ import (
 	finderhttpclient "github.com/ipni/go-libipni/find/client"
 	"github.com/ipni/go-libipni/find/model"
 	"github.com/ischasny/dhfind/metrics"
-	"github.com/multiformats/go-multihash"
 	"go.uber.org/zap"
 )
 
@@ -222,19 +221,6 @@ func (s *Server) handleGetMh(w lookupResponseWriter, r *http.Request) {
 	}
 	mh := w.Key()
 	log := logger.With("multihash", mh)
-
-	dmh, err := multihash.Decode(mh)
-	if err != nil {
-		logger.Errorw("Failed to decode multihash")
-		http.Error(w, "", http.StatusInternalServerError)
-		return
-	}
-
-	// handle only double hashed multihashes
-	if dmh.Code != multihash.DBL_SHA2_256 {
-		http.Error(w, "", http.StatusNotFound)
-		return
-	}
 
 	// It may be sufficient to only use that request context, which gets
 	// canceled when the client connection is closed. This is done to ensure
